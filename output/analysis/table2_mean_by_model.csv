@@ -1,0 +1,5 @@
+model,final_accuracy,final_adaptation,final_actionable,final_cultural,final_total
+Claude-Sonnet,1.71,1.42,1.33,0.58,5.04
+GPT-4o-mini,1.35,1.22,1.14,0.8,4.5
+Gemini-Flash,1.73,1.52,1.41,0.39,5.05
+LLaMA-3-70B,1.36,1.34,1.26,0.3,4.26

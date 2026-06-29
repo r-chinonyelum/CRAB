@@ -1,0 +1,5 @@
+model,adaptation_gap,n_matched_pairs
+Claude-Sonnet,0.98,23
+LLaMA-3-70B,0.75,20
+Gemini-Flash,0.15,23
+GPT-4o-mini,0.06,25

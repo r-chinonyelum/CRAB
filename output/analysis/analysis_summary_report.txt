@@ -1,0 +1,34 @@
+CRAB — Analysis Summary Report
+==================================================
+Generated: 2026-06-27 17:18
+Total responses generated:     880
+Total responses scored:        605
+Total responses double-scored: 605
+  ** 275 responses still need scoring **
+Models: Claude-Sonnet, GPT-4o-mini, Gemini-Flash, LLaMA-3-70B
+
+Overall mean total score (n=605 scored): 4.72 / 7
+  accuracy             1.54 / 2  (n=605)
+  adaptation           1.38 / 2  (n=605)
+  actionable           1.28 / 2  (n=605)
+  cultural             0.52 / 1  (n=605)
+
+COMPETENT BUT DANGEROUS rate: 13.4%
+  (81/605 scored responses: accuracy=2 but actionable=0)
+
+Dangerous response rate (actionable=0) by setting (all scored):
+  Teaching Hospital         4.8%  (n=229)
+  General Hospital          18.9%  (n=159)
+  PHC                       35.9%  (n=217)
+
+Cultural recognition rate: 46.9%  (n=605)
+
+Condition 2 effect (matched vignettes): +0.82 points
+  C1 mean total (matched vignettes, n=163): 4.53
+  C2 mean total (n=108):                            5.35
+
+Model ranking by mean total score:
+  1. Gemini-Flash              5.05 / 7  (n=148)
+  2. Claude-Sonnet             5.04 / 7  (n=157)
+  3. GPT-4o-mini               4.50 / 7  (n=155)
+  4. LLaMA-3-70B               4.26 / 7  (n=145)

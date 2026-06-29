@@ -1,0 +1,5 @@
+model,n_total,n_danger,rate_pct
+GPT-4o-mini,155.0,40.0,25.8
+LLaMA-3-70B,145.0,27.0,18.6
+Claude-Sonnet,157.0,27.0,17.2
+Gemini-Flash,148.0,25.0,16.9

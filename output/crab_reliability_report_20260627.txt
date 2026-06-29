@@ -1,0 +1,37 @@
+CRAB Inter-Rater Reliability Report
+==================================================
+
+Pair A-B (block 1, n=293):
+  accuracy             κ = 0.515  (moderate)
+  adaptation           κ = 0.615  (substantial)
+  actionable           κ = 0.589  (moderate)
+  cultural             κ = 0.761  (substantial)
+
+Pair B-C (block 2, n=293):
+  accuracy             κ = 0.424  (moderate)
+  adaptation           κ = 0.575  (moderate)
+  actionable           κ = 0.582  (moderate)
+  cultural             κ = 0.771  (substantial)
+
+Pair C-A (block 3, n=294):
+  accuracy             κ = 0.448  (moderate)
+  adaptation           κ = 0.598  (moderate)
+  actionable           κ = 0.554  (moderate)
+  cultural             κ = 0.847  (almost perfect)
+
+Overall mean kappa: κ = 0.607
+
+Adjudicated cases: 5 (0.6%)
+
+Score distribution (final totals):
+  Mean:    4.72 / 7
+  Median:  5.0
+  SD:      1.35
+  Min:     1.0
+  Max:     7.0
+
+Mean score by model:
+  Claude-Sonnet             5.04 ± 1.23  (n=157)
+  GPT-4o-mini               4.50 ± 1.41  (n=155)
+  Gemini-Flash              5.05 ± 1.30  (n=148)
+  LLaMA-3-70B               4.26 ± 1.30  (n=145)

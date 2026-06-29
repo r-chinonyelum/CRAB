@@ -1,0 +1,13 @@
+model,setting,1,2
+Claude-Sonnet,A,46,15
+Claude-Sonnet,B,41,0
+Claude-Sonnet,C,44,11
+GPT-4o-mini,A,40,15
+GPT-4o-mini,B,43,0
+GPT-4o-mini,C,44,13
+Gemini-Flash,A,41,15
+Gemini-Flash,B,37,0
+Gemini-Flash,C,41,14
+LLaMA-3-70B,A,42,15
+LLaMA-3-70B,B,38,0
+LLaMA-3-70B,C,40,10

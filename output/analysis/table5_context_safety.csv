@@ -1,0 +1,5 @@
+model,mean,std
+Claude-Sonnet,2.75,1.07
+GPT-4o-mini,2.35,1.19
+Gemini-Flash,2.93,1.16
+LLaMA-3-70B,2.6,1.14

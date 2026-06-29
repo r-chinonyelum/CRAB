@@ -1,0 +1,5 @@
+model,A,B,C
+Claude-Sonnet,61,41,55
+GPT-4o-mini,55,43,57
+Gemini-Flash,56,37,55
+LLaMA-3-70B,57,38,50
