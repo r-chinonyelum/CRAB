@@ -72,45 +72,6 @@ Each AI response is scored by Nigerian physicians on **four dimensions**:
 
 ---
 
-## Key Findings
-
-> ⚠️ *Results will be populated after scoring is complete. The structure below shows what will be reported.*
-
-<!-- UNCOMMENT AND FILL WHEN RESULTS ARE READY
-
-### Headline numbers
-
-| Metric | Value |
-|--------|-------|
-| Mean total score (Condition 1) | X.XX / 7 |
-| Actionable safety mean | X.XX / 2 |
-| Competent-but-dangerous rate | XX% |
-| Cultural recognition rate | XX% |
-
-### The setting gradient
-
-Scores decline as resources decline:
-
-| Setting | Mean Total | Actionable Safety | Dangerous Rate |
-|---------|-----------|-------------------|----------------|
-| Teaching Hospital | X.XX | X.XX | XX% |
-| General Hospital | X.XX | X.XX | XX% |
-| PHC | X.XX | X.XX | XX% |
-
-### Does prompting help?
-
-Condition 2 (explicit resource context) improved scores by **+X.XX points** on average, primarily through gains in adaptation and actionable safety. This means models *can* give safer advice — they just don't, unless explicitly told what's available.
-
--->
-
-<p align="center">
-  <img src="assets/fig_competence_safety_scatter.png" alt="Competence vs Safety scatter" width="600"/>
-  <br/>
-  <em>Each dot is one model response. The bottom-right quadrant ("competent but dangerous") is the core finding.</em>
-</p>
-
----
-
 ## Who This Is For
 
 ### For Deployers
@@ -133,14 +94,14 @@ Condition 2 (explicit resource context) improved scores by **+X.XX points** on a
 **You are:** A Nigerian physician interested in evaluating AI tools used in your facility or region.
 
 **What to do:**
-1. Review the [vignette dataset](data/crab_vignettes.xlsx). Are these scenarios relevant to your setting?
+1. Review the [vignette dataset](data/cases.xlsx). Are these scenarios relevant to your setting?
 2. Adapt vignettes to your context: swap in your facility's actual resource profile, add cases for conditions common in your region
-3. Use the [scoring rubric](docs/rubric.md) to evaluate any AI tool's responses
+3. Use the scoring rubric to evaluate any AI tool's responses
 4. Contribute new vignettes (see [Contributing](#contributing))
 
 **What you get:** A structured method for assessing whether an AI tool is safe for your patients.
 
-📂 Start here → [`data/`](data/) and [`docs/rubric.md`](docs/rubric.md)
+📂 Start here → [`data/`](data/) and [`data/cases.xlsx`](data/cases.xlsx)
 
 ---
 
@@ -160,16 +121,14 @@ Condition 2 (explicit resource context) improved scores by **+X.XX points** on a
 
 ## Rapid Safety Screen
 
-> **5 prompts. 20 minutes. No medical degree required.**
+> **5 prompts. 20 minutes.**
 
-The rapid safety screen is a lightweight subset of CRAB targeting the highest-risk failure modes observed in our evaluation. Each prompt comes with a **pre-written pass/fail rubric** so a non-clinician can assess the result.
+The rapid safety screen is a lightweight subset of CRAB targeting the highest-risk failure modes observed in our evaluation. Each prompt comes with a **pre-written pass/fail rubric** so you can assess the result.
 
 ```
 rapid_safety_screen/
 ├── screen_prompts.json        # 5 scenarios with facility context
-├── pass_fail_rubric.md        # What PASS and FAIL look like for each
-├── run_screen.py              # Script to run all 5 through any OpenAI-compatible API
-└── interpret_results.md       # What to do with the results
+└── run_screen.py              # Script to run all 5 through any LITELLM-compatible API
 ```
 
 **How to use it:**
@@ -231,7 +190,6 @@ crab/
 │
 └── assets/
     ├── crab_logo.png
-    ├── crab_concept.png
     └── ...
 ```
 
@@ -247,7 +205,7 @@ crab/
 ### Setup
 
 ```bash
-git clone https://github.com/[your-username]/crab-benchmark.git--EDIT THIS
+git clone https://github.com/r-chinonyelum/CRAB
 cd crab-benchmark
 
 pip install -r requirements.txt
@@ -321,20 +279,7 @@ context here is the Nigerian setting
 
 ## Failure Taxonomy
 
-> *How* models fail matters as much as *how often*. These are the failure patterns we observed:
-
-<!-- POPULATE FROM ANALYSIS RESULTS
-
-| Failure Mode | Description | Frequency | Most Affected Setting |
-|-------------|-------------|-----------|----------------------|
-| **Treatment displacement** | Recommends unavailable drug, displacing available alternative | XX% | PHC |
-| **Setting blindness** | Identical advice across all facility tiers | XX% | All |
-| **Referral without stabilisation** | Says "refer" but gives no pre-referral management | XX% | PHC, General |
-| **Vague hedging** | Technically correct but too nonspecific to act on | XX% | All |
-| **Resource hallucination** | Assumes availability of equipment/labs not present | XX% | PHC, General |
-| **Cultural silence** | No acknowledgement of local health beliefs or barriers | XX% | All |
-
--->
+> *How* models fail matters as much as *how often*. The failure patterns we observed are listed in the doc folder.
 
 ---
 
@@ -356,9 +301,7 @@ We believe in being explicit about what CRAB does and does not do:
 - 60 vignettes provide signal for aggregate patterns but limit statistical power for subgroup analysis
 - The cultural recognition dimension (0–1) is too coarse to differentiate meaningfully between models. Future versions need a more granular scale
 - Physician scorers are concentrated in SW/SE Nigeria; clinical norms may differ in other regions
-- Models evaluated are mid-2026 versions and results do not transfer to future model versions without re-evaluation
-
-For the full limitations discussion, see [`docs/limitations.md`](docs/limitations.md).
+- Results do not transfer to future model versions without re-evaluation
 
 ---
 
@@ -367,7 +310,7 @@ For the full limitations discussion, see [`docs/limitations.md`](docs/limitation
 CRAB is designed to grow. Here's how to help:
 
 ### Clinicians: Add vignettes
-The benchmark needs cases from more regions, specialties, and facility types. See [`docs/adding_vignettes.md`](docs/adding_vignettes.md) for the template and guidelines. You can fill in the spreadsheet template and submit a pull request or email us.
+The benchmark needs cases from more regions, specialties, and facility types. You can fill in using the spreadsheet template and submit a pull request or email us.
 
 **What makes a good vignette:**
 - A realistic clinical scenario you've seen in practice
@@ -389,9 +332,9 @@ Some ideas include:
 ```bibtex
 @misc{crab2026,
   title={CRAB: Clinical Resource-Adapted Benchmark for AI Safety in Nigerian Healthcare},
-  author={[Your Name] and [Team Members]},
+  author={Chinonyelum Igwe, Mesoma Okeke, Olajumoke Oladosu},
   year={2026},
-  url={https://github.com/[your-username]/crab-benchmark}
+  url={https://github.com/r-chinonyelum/CRAB}
 }
 ```
 
@@ -422,5 +365,5 @@ Clinical vignettes were authored and scored by practicing Nigerian physicians.
 ---
 
 <p align="center">
-  <em>Built for the clinics that don't have everything <br/>because their patients also deserve safe AI.</em>
+  <em>Built to enable native safety evaluation for non-native products.</em>
 </p>
