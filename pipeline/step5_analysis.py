@@ -1,11 +1,6 @@
 """
-CRAB Pipeline — Step 5: Full Analysis and Visualisation
-========================================================
 Reads the analysis master CSV from Step 4 and produces all
 tables, figures, and derived metrics for the submission.
-
-Requires: matplotlib, seaborn, pandas, numpy
-Install:  pip install matplotlib seaborn pandas numpy
 
 Run:  python step5_analysis.py --data output/crab_analysis_master_YYYYMMDD.csv
 Output: output/analysis/  (all figures and tables)
@@ -16,80 +11,6 @@ Analysis layers:
   3. Comparative analysis (model / setting / condition)
   4. Failure mode taxonomy
   5. Derived metrics (context safety, adaptation gap, etc.)
-
-====================================================================
-BUG FIXES vs. original step5_analysis.py
-====================================================================
-
-BUG 1 — "Total scored responses" is the wrong denominator everywhere.
-  PROBLEM: len(df) = 880 counts ALL rows in the master CSV, including
-           rows that are partially scored (only one scorer has filled
-           in scores) or entirely unscored (both scorer columns blank).
-           These unscored rows come through from Step 4 because
-           step4_compile_scores.py does not drop rows that lack scores —
-           it outputs every row the scoring sheet contained.
-  FIX:     Define two filtered subsets at load time:
-             df_scored  — rows where final_total is not NaN
-                          (at least one scorer scored every dimension)
-             df_double  — rows where BOTH A_ and B_ per-dim columns
-                          are non-NaN (full double coverage available)
-           Use df_scored for score means, rankings, setting means etc.
-           Use df_double for kappa and danger-rate confirmation.
-           Report both N clearly so the reader is not misled.
-
-BUG 2 — Kappa n=210 does not match total responses.
-  PROBLEM: Kappa is calculated on the mask df[A_dim].notna() & df[B_dim].notna().
-           That mask silently drops any row where one scorer left a cell
-           blank. With 880 rows but only 210 double-scored the kappa n
-           looks like a random number and is never explained.
-  FIX:     Kappa now operates only on df_double (rows where both
-           scorers scored every dimension) and the printed line says
-           "n = <double-scored count>" explicitly so the reader can see
-           exactly what population the agreement figure applies to.
-
-BUG 3 — Percentages (danger rate, cultural rate, CBD rate) use len(df).
-  PROBLEM: Computing n_dangerous / len(df) treats all 880 rows as
-           scored, which suppresses every percentage.
-  FIX:     Use len(df_scored) as the denominator for population rates
-           (CBD, cultural), and len(df_double) for rates that require
-           both scorers to have agreed (danger confirmation).
-
-BUG 4 — Condition 1 C-setting rows were included in mean scores.
-  PROBLEM: df_scored includes ALL condition-1 rows for setting C.
-           Because C2 only runs settings A and C, the C1-C mean is
-           pulled lower by many more data points than C1-A, making
-           the setting-C mean misleadingly low in the gradient chart
-           and in the setting comparison table. The original code had
-           a comment "Bug 1 fix" for the condition comparison but did
-           NOT apply the same restriction in comparative_analysis().
-  NOTE:    Setting C condition-1 rows are VALID scored responses and
-           should NOT be deleted — they belong in model means and
-           overall counts. They are only excluded from the C1 side of
-           the C1-vs-C2 matched comparison, which this script already
-           handled correctly. This bug note flags that the setting-C
-           row counts printed in the output (e.g. n=80 per model)
-           include both C1 and C2=0 rows, which is correct — do not
-           filter them here.
-
-BUG 5 — "Competent but dangerous" denominator uses len(df) not df_scored.
-  PROBLEM: comp_danger / len(df) divides by 880 even though only ~605
-           rows are double-scored (the only rows where final_accuracy
-           and final_actionable are both reliable averages).
-  FIX:     Use len(df_scored) as denominator for CBD rate.
-
-BUG 6 — response_id reassignment in step3 breaks step4 merge.
-  PROBLEM: step3_build_scoring_sheet.py reassigns response_id as
-           R0001..Rn after shuffling. step3b_merge.py then merges
-           scorer files on that new response_id. But step4 maps
-           COL_MAP "response_id" → "response_id" expecting the
-           original step-2 IDs (also R0001..). If step3 was rerun
-           or the shuffle produced a different order, the IDs in
-           the scorer files won't match the model-key file.
-           This is NOT fixed in step5 (it is a step3/step4 issue),
-           but step5 now prints a warning if response_id values look
-           mismatched.
-
-====================================================================
 """
 
 import argparse
@@ -112,7 +33,6 @@ except ImportError:
     print("ERROR: pip install matplotlib seaborn")
     sys.exit(1)
 
-# ── CONFIG ──────────────────────────────────────────────────────────
 OUTPUT_DIR = Path("output/analysis")
 DIMS       = ["accuracy", "adaptation", "actionable", "cultural"]
 DIM_MAX    = {"accuracy": 2, "adaptation": 2, "actionable": 2, "cultural": 1}
@@ -146,9 +66,6 @@ plt.rcParams.update({
 })
 sns.set_style("whitegrid")
 
-
-# ── LOAD AND PREPARE DATA ──────────────────────────────────────────
-
 def load_data(path: str):
     df = pd.read_csv(path)
 
@@ -161,22 +78,16 @@ def load_data(path: str):
     if "final_adaptation" in df.columns and "final_actionable" in df.columns:
         df["context_safety"] = df["final_adaptation"] + df["final_actionable"]
 
-    # Convert individual scorer columns to numeric
     for scorer in ["A", "B", "C"]:
         for dim in DIMS:
             col = f"{scorer}_{dim}"
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors="coerce")
-
-    # df_scored: rows with a final_total (non‑NaN)
     df_scored = df[df["final_total"].notna()].copy()
 
-    # df_double: rows where both scorers for the block have all dimensions
-    # We'll create this per block and concatenate
     double_rows = []
     for block, s1, s2 in [(1, "A", "B"), (2, "B", "C"), (3, "C", "A")]:
         mask = (df["block"] == block)
-        # Check that both scorers have all four dimensions non‑NaN
         for dim in DIMS:
             mask &= df[f"{s1}_{dim}"].notna() & df[f"{s2}_{dim}"].notna()
         double_rows.append(df[mask])
@@ -187,16 +98,12 @@ def load_data(path: str):
 
     return df, df_scored, df_double
 
-
-# ── LAYER 1: DESCRIPTIVE STATISTICS ────────────────────────────────
-
 def descriptive_stats(df_all: pd.DataFrame, df_scored: pd.DataFrame,
                       df_double: pd.DataFrame):
     print("\n" + "=" * 60)
     print("LAYER 1: DESCRIPTIVE STATISTICS")
     print("=" * 60)
 
-    # ── BUG FIX 1: report all three population counts clearly ──
     print(f"\nRows in master CSV (all responses):  {len(df_all)}")
     print(f"Rows with final_total scored:        {len(df_scored)}")
     print(f"Rows double-scored (both A & B):     {len(df_double)}")
@@ -207,13 +114,11 @@ def descriptive_stats(df_all: pd.DataFrame, df_scored: pd.DataFrame,
               f"scoring is incomplete. All score means and percentages "
               f"below are based on df_scored (n={len(df_scored)}) only.")
 
-    # Response counts (use df_all to show what was generated)
     counts = df_all.groupby(["model", "setting", "condition"]).size().unstack(fill_value=0)
     counts.to_csv(OUTPUT_DIR / "table1_response_counts_all.csv")
     print("\nGenerated response counts (all, including unscored):")
     print(counts)
 
-    # Scored response counts
     if len(df_scored) < len(df_all):
         counts_s = df_scored.groupby(["model", "setting", "condition"]).size().unstack(fill_value=0)
         counts_s.to_csv(OUTPUT_DIR / "table1_response_counts_scored.csv")
@@ -226,7 +131,6 @@ def descriptive_stats(df_all: pd.DataFrame, df_scored: pd.DataFrame,
     print("\nScored responses per model:")
     print(model_counts)
 
-    # Adjudication summary (from df_scored)
     if "needs_adjudication" in df_scored.columns:
         n_adj = df_scored["needs_adjudication"].sum()
         print(f"\nAdjudicated cases: {n_adj} ({100*n_adj/max(len(df_scored),1):.1f}% "
@@ -236,12 +140,6 @@ def descriptive_stats(df_all: pd.DataFrame, df_scored: pd.DataFrame,
 
 
 def compute_kappa(df_double: pd.DataFrame):
-    """
-    BUG FIX 2: kappa runs only on df_double (rows where both
-    scorers provided scores for every dimension). The n printed
-    is the actual double-scored population, not a masked subset
-    of the full 880.
-    """
     print(f"\nInter-rater reliability (Cohen's kappa):")
     print(f"  Computed on {len(df_double)} double-scored responses")
 
@@ -251,7 +149,6 @@ def compute_kappa(df_double: pd.DataFrame):
         b_col = f"B_{dim}"
         if a_col not in df_double.columns or b_col not in df_double.columns:
             continue
-        # Both columns are guaranteed non-NaN in df_double, but guard anyway
         mask = df_double[a_col].notna() & df_double[b_col].notna()
         r1 = df_double.loc[mask, a_col].astype(int)
         r2 = df_double.loc[mask, b_col].astype(int)
@@ -274,10 +171,7 @@ def compute_kappa(df_double: pd.DataFrame):
     return kappa_results
 
 
-# ── LAYER 2: PER-DIMENSION ANALYSIS ────────────────────────────────
-
 def dimension_analysis(df_scored: pd.DataFrame):
-    """BUG FIX 3 & 5: all means and rates use df_scored."""
     print("\n" + "=" * 60)
     print("LAYER 2: PER-DIMENSION ANALYSIS")
     print("=" * 60)
@@ -315,7 +209,6 @@ def dimension_analysis(df_scored: pd.DataFrame):
     plt.close(fig)
     print("  Saved: fig1_dimension_by_model.png")
 
-    # Accuracy × Actionable cross-tabulation
     if "final_accuracy" in df_scored.columns and "final_actionable" in df_scored.columns:
         df_scored = df_scored.copy()
         df_scored["acc_int"] = df_scored["final_accuracy"].round().astype("Int64")
@@ -327,7 +220,6 @@ def dimension_analysis(df_scored: pd.DataFrame):
         print("\nAccuracy × Actionable cross-tabulation:")
         print(xtab)
 
-        # BUG FIX 5: denominator is df_scored not df_all
         if 2 in df_scored["acc_int"].values and 0 in df_scored["act_int"].values:
             comp_danger = ((df_scored["acc_int"] == 2) & (df_scored["act_int"] == 0)).sum()
             rate = comp_danger / len(df_scored) * 100
@@ -336,18 +228,13 @@ def dimension_analysis(df_scored: pd.DataFrame):
 
     return means
 
-
-# ── LAYER 3: COMPARATIVE ANALYSIS ──────────────────────────────────
-
 def comparative_analysis(df_scored: pd.DataFrame):
-    """BUG FIX 3: all group means use df_scored."""
     print("\n" + "=" * 60)
     print("LAYER 3: COMPARATIVE ANALYSIS")
     print("=" * 60)
 
     dim_cols = [f"final_{d}" for d in DIMS if f"final_{d}" in df_scored.columns]
 
-    # ── 3a. Across settings ─────────────────────────────────────
     setting_means = df_scored.groupby("setting")[dim_cols + ["final_total"]].mean().round(2)
     setting_means.to_csv(OUTPUT_DIR / "table3a_mean_by_setting.csv")
     print("\nMean scores by setting (scored responses only):")
@@ -365,7 +252,6 @@ def comparative_analysis(df_scored: pd.DataFrame):
         for m, s, n in thin_cells:
             print(f"    {m} × Setting {s}: n={n}")
 
-    # Also report condition breakdown per setting so C scores are visible
     n_cond = df_scored.groupby(["setting", "condition"]).size().unstack(fill_value=0)
     print("\nN (scored) per setting × condition:")
     print(n_cond)
@@ -408,7 +294,6 @@ def comparative_analysis(df_scored: pd.DataFrame):
     plt.close(fig)
     print("  Saved: fig2_setting_gradient.png")
 
-    # ── 3b. Condition 1 vs Condition 2 (matched vignettes) ──────
     c1 = df_scored[df_scored["condition"] == 1]
     c2 = df_scored[df_scored["condition"] == 2]
 
@@ -423,10 +308,6 @@ def comparative_analysis(df_scored: pd.DataFrame):
               f"(vignettes appearing in both conditions: {len(c2_vigs)})")
         print(f"  C2 responses:         {n_c2}")
 
-        # BUG NOTE: C1-matched includes ALL three settings (A, B, C)
-        # for those vignettes. C2 only covers settings A and C.
-        # This means C1-matched has ~3x as many rows per vignette as C2.
-        # Print the breakdown so it is transparent.
         print("\n  C1-matched setting breakdown:")
         print(c1_matched.groupby("setting").size().to_string())
         print("  C2 setting breakdown:")
@@ -468,7 +349,6 @@ def comparative_analysis(df_scored: pd.DataFrame):
         plt.close(fig)
         print("  Saved: fig3_condition_comparison.png")
 
-        # Adaptation gap per model
         gap_data = []
         for model in df_scored["model"].unique():
             c1m = c1_matched[c1_matched["model"] == model].groupby(
@@ -490,7 +370,6 @@ def comparative_analysis(df_scored: pd.DataFrame):
     else:
         print("\n  No Condition 2 responses found — condition comparison skipped.")
 
-    # ── 3c. Clinical unit analysis ──────────────────────────────
     if "unit" in df_scored.columns:
         unit_means = df_scored.groupby("unit")[dim_cols + ["final_total"]].mean().round(2)
         unit_means.to_csv(OUTPUT_DIR / "table3c_mean_by_unit.csv")
@@ -502,39 +381,25 @@ def comparative_analysis(df_scored: pd.DataFrame):
 
     return setting_means
 
-
-# ── LAYER 4: FAILURE MODE TAXONOMY ─────────────────────────────────
-
 def failure_mode_analysis(df_scored: pd.DataFrame, df_double: pd.DataFrame):
-    """
-    BUG FIX 3 & 6:
-      - Danger rate denominator is df_double (requires both scorers
-        to have rated actionable) for confirmation, clearly stated.
-      - CBD rate denominator is df_scored.
-    """
     print("\n" + "=" * 60)
     print("LAYER 4: FAILURE MODE ANALYSIS")
     print("=" * 60)
 
     if "final_actionable" in df_scored.columns:
-        # Confirmed dangerous = both scorers present AND final_actionable rounds to 0
-        # We use df_double for the confirmed rate, df_scored for the overall rate.
         n_scored   = len(df_scored)
         n_double   = len(df_double)
 
-        # Overall danger rate (df_scored — may include single-scored)
         danger_all = (df_scored["final_actionable"].round() == 0).sum()
         print(f"\nDangerous response rate (actionable=0):")
         print(f"  All scored responses:   {danger_all}/{n_scored} = "
               f"{100*danger_all/max(n_scored,1):.1f}%  (includes single-scored)")
 
-        # Confirmed danger rate (df_double only)
         if n_double > 0:
             danger_conf = (df_double["final_actionable"].round() == 0).sum()
             print(f"  Double-scored (confirmed): {danger_conf}/{n_double} = "
                   f"{100*danger_conf/max(n_double,1):.1f}%")
 
-        # By model — use df_scored, show n clearly
         danger_model = (df_scored
                         .groupby("model")
                         .apply(lambda x: pd.Series({
@@ -550,7 +415,6 @@ def failure_mode_analysis(df_scored: pd.DataFrame, df_double: pd.DataFrame):
             print(f"  {model:<25} {row['rate_pct']:.1f}%  "
                   f"({int(row['n_danger'])}/{int(row['n_total'])})")
 
-        # By setting
         danger_setting = (df_scored
                           .groupby("setting")
                           .apply(lambda x: round(
@@ -613,16 +477,11 @@ def failure_mode_analysis(df_scored: pd.DataFrame, df_double: pd.DataFrame):
         print(f"  Commission ratio: {ratio:.2f} "
               f"({'more commission' if ratio > 0.5 else 'more omission'})")
 
-
-# ── LAYER 5: DERIVED METRICS ───────────────────────────────────────
-
 def derived_metrics(df_scored: pd.DataFrame):
-    """BUG FIX 3: all rates use df_scored."""
     print("\n" + "=" * 60)
     print("LAYER 5: DERIVED METRICS")
     print("=" * 60)
 
-    # ── 5.1 Context Safety Score ─────────────────────────────────
     if "context_safety" in df_scored.columns:
         print("\nContext Safety Score (adaptation + actionable, 0-4):")
         cs_by_model = df_scored.groupby("model")["context_safety"].agg(["mean", "std"]).round(2)
@@ -661,7 +520,6 @@ def derived_metrics(df_scored: pd.DataFrame):
             plt.close(fig)
             print("  Saved: fig_competence_safety_scatter.png")
 
-    # ── 5.2 Violin plots ─────────────────────────────────────────
     fig, axes = plt.subplots(1, 4, figsize=(16, 5))
     for idx, dim in enumerate(DIMS):
         col = f"final_{dim}"
@@ -693,7 +551,6 @@ def derived_metrics(df_scored: pd.DataFrame):
     plt.close(fig)
     print("  Saved: fig6_violin_distributions.png")
 
-    # ── 5.3 Clinical unit heatmap ─────────────────────────────────
     if "unit" in df_scored.columns:
         dim_cols = [f"final_{d}" for d in DIMS if f"final_{d}" in df_scored.columns]
         unit_dim = df_scored.groupby("unit")[dim_cols].mean()
@@ -711,7 +568,6 @@ def derived_metrics(df_scored: pd.DataFrame):
             plt.close(fig)
             print("  Saved: fig7_unit_heatmap.png")
 
-    # ── 5.4 Failure mode template ─────────────────────────────────
     print("\n  Note: Failure mode heatmap requires manual coding of scorer notes.")
     print("  Use table_failure_mode_template.csv to code failure modes,")
     print("  then re-run this script.")
@@ -738,7 +594,6 @@ def derived_metrics(df_scored: pd.DataFrame):
             fm_df.to_csv(OUTPUT_DIR / "table_failure_mode_template.csv", index=False)
             print(f"  Template saved with {len(note_rows)} note entries to code.")
 
-    # ── 5.5 Condition 2 dimension-specific effect ─────────────────
     c2 = df_scored[df_scored["condition"] == 2]
     if len(c2) > 0:
         c1_matched = df_scored[(df_scored["condition"] == 1) &
@@ -767,9 +622,7 @@ def derived_metrics(df_scored: pd.DataFrame):
         plt.close(fig)
         print("  Saved: fig8_c2_effect_by_dimension.png")
 
-    # ── 5.6 Cultural recognition rate ─────────────────────────────
     if "final_cultural" in df_scored.columns:
-        # BUG FIX 3: denominator is df_scored
         cultural_rate = (df_scored["final_cultural"].round() >= 1).mean() * 100
         print(f"\nCultural recognition rate: {cultural_rate:.1f}% "
               f"of {len(df_scored)} scored responses scored ≥1")
@@ -792,7 +645,6 @@ def derived_metrics(df_scored: pd.DataFrame):
                     print(f"  mean {dim}: {cult_1[col].mean():.2f} vs "
                           f"{cult_0[col].mean():.2f} (without)")
 
-    # ── 5.7 Within-vignette variance ──────────────────────────────
     if "final_total" in df_scored.columns:
         c1 = df_scored[df_scored["condition"] == 1]
         var_by_model = c1.groupby(["model", "vignette_id"])["final_total"].var()
@@ -802,7 +654,6 @@ def derived_metrics(df_scored: pd.DataFrame):
         for model, v in mean_var.items():
             print(f"  {model:<25} variance = {v:.2f}")
 
-    # ── 5.8 PHC referral analysis ─────────────────────────────────
     c_responses = df_scored[(df_scored["setting"] == "C") & (df_scored["condition"] == 1)]
     if len(c_responses) > 0 and "response" in df_scored.columns:
         referral_pattern = re.compile(
@@ -834,7 +685,6 @@ def derived_metrics(df_scored: pd.DataFrame):
         for cat, count in categories.items():
             print(f"  {cat:<25} {count} ({100*count/total_c:.1f}%)")
 
-    # ── 5.9 Word count analysis ────────────────────────────────────
     if "response" in df_scored.columns:
         df_scored = df_scored.copy()
         df_scored["word_count"] = df_scored["response"].astype(str).apply(
@@ -845,9 +695,6 @@ def derived_metrics(df_scored: pd.DataFrame):
         print("\nResponse word count by model:")
         print(wc_by_model)
         wc_by_model.to_csv(OUTPUT_DIR / "table_word_count.csv")
-
-
-# ── SUMMARY REPORT ──────────────────────────────────────────────────
 
 def write_summary(df_all: pd.DataFrame, df_scored: pd.DataFrame,
                   df_double: pd.DataFrame):
@@ -876,7 +723,6 @@ def write_summary(df_all: pd.DataFrame, df_scored: pd.DataFrame,
 
     lines.append("")
 
-    # CBD rate — BUG FIX 5: use df_scored
     if "final_accuracy" in df_scored.columns and "final_actionable" in df_scored.columns:
         comp_danger = ((df_scored["final_accuracy"].round() == 2) &
                         (df_scored["final_actionable"].round() == 0)).sum()
@@ -886,7 +732,6 @@ def write_summary(df_all: pd.DataFrame, df_scored: pd.DataFrame,
                      f"accuracy=2 but actionable=0)")
         lines.append("")
 
-    # Dangerous rate by setting — BUG FIX 3
     if "final_actionable" in df_scored.columns:
         lines.append("Dangerous response rate (actionable=0) by setting (all scored):")
         for s in ["A", "B", "C"]:
@@ -897,14 +742,12 @@ def write_summary(df_all: pd.DataFrame, df_scored: pd.DataFrame,
                              f"(n={len(sub)})")
         lines.append("")
 
-    # Cultural recognition — BUG FIX 3
     if "final_cultural" in df_scored.columns:
         cult_rate = (df_scored["final_cultural"].round() >= 1).mean() * 100
         lines.append(f"Cultural recognition rate: {cult_rate:.1f}%  "
                      f"(n={len(df_scored)})")
         lines.append("")
 
-    # Condition 2 effect
     c1 = df_scored[df_scored["condition"] == 1]
     c2 = df_scored[df_scored["condition"] == 2]
     if len(c2) > 0 and "final_total" in df_scored.columns:
@@ -919,7 +762,6 @@ def write_summary(df_all: pd.DataFrame, df_scored: pd.DataFrame,
         lines.append(f"  C2 mean total (n={len(c2)}):                            {c2_mean:.2f}")
         lines.append("")
 
-    # Per-model ranking
     if "final_total" in df_scored.columns:
         lines.append("Model ranking by mean total score:")
         ranking = df_scored.groupby("model")["final_total"].mean().sort_values(ascending=False)
@@ -934,9 +776,6 @@ def write_summary(df_all: pd.DataFrame, df_scored: pd.DataFrame,
     print(f"\n{'=' * 60}")
     print(report)
     print(f"\nSaved: analysis_summary_report.txt")
-
-
-# ── MAIN ────────────────────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser(
@@ -953,7 +792,6 @@ def main():
     print("CRAB — Step 5: Full Analysis")
     print("=" * 60)
 
-    # BUG FIX 1: load returns three population subsets
     df_all, df_scored, df_double = load_data(args.data)
     print(f"Loaded: {len(df_all)} total rows  |  "
           f"{len(df_scored)} scored  |  "
@@ -964,24 +802,17 @@ def main():
         print("\nERROR: No scored responses found. "
               "Check that step4_compile_scores.py ran successfully.")
         sys.exit(1)
-
-    # Layer 1 — BUG FIX 2: kappa uses df_double
     descriptive_stats(df_all, df_scored, df_double)
     compute_kappa(df_double)
 
-    # Layer 2 — BUG FIX 3 & 5: all rates on df_scored
     dimension_analysis(df_scored)
 
-    # Layer 3
     comparative_analysis(df_scored)
 
-    # Layer 4 — BUG FIX 3 & 6
     failure_mode_analysis(df_scored, df_double)
 
-    # Layer 5
     derived_metrics(df_scored)
 
-    # Summary — BUG FIX 3 & 5
     write_summary(df_all, df_scored, df_double)
 
     print(f"\n{'=' * 60}")

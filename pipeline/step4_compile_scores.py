@@ -3,12 +3,7 @@ After scorers have completed the scoring sheet, this script
 reads their scores, merges them with the raw response data,
 applies the adjudication rules, and produces the master analysis dataset.
 
-Uses all three scorers (A, B, C) based on the block column:
-  block=1 -> scorers A and B
-  block=2 -> scorers B and C
-  block=3 -> scorers C and A
-
-Run:  python step4_compile_scores.py --scored output/crab_scoring_sheet_YYYYMMDD.xlsx
+python step4_compile_scores.py --scored output/crab_scoring_sheet_YYYYMMDD.xlsx
 """
 
 import argparse
@@ -79,7 +74,7 @@ def load_scored(path: str) -> pd.DataFrame:
             col = f"{scorer}_{dim}"
             if col in df.columns:
                 df[col] = safe_numeric(df[col])
-        # total columns might exist; convert too
+        # cnvert total columns that might exist too;
         total_col = f"{scorer}_total"
         if total_col in df.columns:
             df[total_col] = safe_numeric(df[total_col])
@@ -92,7 +87,6 @@ def compute_scorer_totals(df: pd.DataFrame) -> pd.DataFrame:
         dim_cols = [f"{scorer}_{d}" for d in DIMS]
         available = [c for c in dim_cols if c in df.columns]
         if available:
-            # Only compute if total column doesn't exist or is all NaN
             total_col = f"{scorer}_total_computed"
             df[total_col] = df[available].sum(axis=1, min_count=len(available))
     return df
@@ -127,7 +121,6 @@ def resolve_scores(df: pd.DataFrame) -> pd.DataFrame:
     for idx, row in df.iterrows():
         block = row.get("block")
         if pd.isna(block):
-            # If block missing, skip or treat as missing
             finals.append({d: np.nan for d in DIMS})
             diff_list.append(np.nan)
             need_adj.append(False)
@@ -159,19 +152,17 @@ def resolve_scores(df: pd.DataFrame) -> pd.DataFrame:
             else:
                 dim_scores[dim] = (v1 + v2) / 2.0
 
-        # Totals for each scorer (computed from their four dimensions)
+        # totals for each scorer (computed from their four dimensions)
         t1_col = f"{s1}_total_computed"
         t2_col = f"{s2}_total_computed"
         t1 = row.get(t1_col, np.nan)
         t2 = row.get(t2_col, np.nan)
 
-        # If totals are missing, compute from dims
         if pd.isna(t1):
             t1 = sum(row.get(f"{s1}_{d}", np.nan) for d in DIMS)
         if pd.isna(t2):
             t2 = sum(row.get(f"{s2}_{d}", np.nan) for d in DIMS)
 
-        # Final total
         if pd.isna(t1) and pd.isna(t2):
             final_total = np.nan
         elif pd.isna(t1):
@@ -181,7 +172,7 @@ def resolve_scores(df: pd.DataFrame) -> pd.DataFrame:
         else:
             final_total = (t1 + t2) / 2.0
 
-        # Difference for adjudication
+        # adjudication
         if pd.isna(t1) or pd.isna(t2):
             diff = np.nan
         else:
@@ -192,16 +183,14 @@ def resolve_scores(df: pd.DataFrame) -> pd.DataFrame:
         need_adj.append(not pd.isna(diff) and diff > 1)
         final_total_list.append(final_total)
 
-    # Assign columns
+    # assign columns
     for dim in DIMS:
         df[f"final_{dim}"] = [d[dim] for d in finals]
     df["total_diff"] = diff_list
     df["needs_adjudication"] = need_adj
-    df["final_total_raw"] = final_total_list  # before adjudication override
+    df["final_total_raw"] = final_total_list 
 
-    # Apply adjudication override if final_total_entered is provided
     if "final_total_entered" in df.columns:
-        # Override with entered value where not NaN/empty
         entered = df["final_total_entered"]
         mask = pd.notna(entered) & (entered != "") & (entered != "—")
         df["final_total"] = df["final_total_raw"].copy()
@@ -209,7 +198,6 @@ def resolve_scores(df: pd.DataFrame) -> pd.DataFrame:
     else:
         df["final_total"] = df["final_total_raw"]
 
-    # Drop the raw column
     df = df.drop(columns=["final_total_raw"], errors="ignore")
 
     return df
@@ -235,7 +223,7 @@ def reliability_report(df: pd.DataFrame) -> str:
     lines = ["CRAB Inter-Rater Reliability Report",
              "=" * 50, ""]
 
-    # For each pair, compute kappa per dimension
+    # compute kappa per dimension per pair
     pairs = [(1, "A", "B"), (2, "B", "C"), (3, "C", "A")]
     all_kappas = []
     for block, s1, s2 in pairs:
@@ -260,13 +248,12 @@ def reliability_report(df: pd.DataFrame) -> str:
         lines.append(f"Overall mean kappa: κ = {mean_k:.3f}")
         lines.append("")
 
-    # Adjudication summary
     n_adj = df["needs_adjudication"].sum()
     n_total = len(df)
     lines.append(f"Adjudicated cases: {n_adj} ({100*n_adj/n_total:.1f}%)")
     lines.append("")
 
-    # Score distribution
+    # score distribution
     if "final_total" in df.columns:
         desc = df["final_total"].describe()
         lines.append("Score distribution (final totals):")
@@ -277,7 +264,7 @@ def reliability_report(df: pd.DataFrame) -> str:
         lines.append(f"  Max:     {desc['max']:.1f}")
         lines.append("")
 
-    # Per model
+    # per model
     if "model" in df.columns and "final_total" in df.columns:
         lines.append("Mean score by model:")
         model_scores = df.groupby("model")["final_total"].agg(["mean", "std", "count"]).round(2)
@@ -315,7 +302,7 @@ def main():
     print("\nResolving final scores using appropriate scorer pairs...")
     df = resolve_scores(df)
 
-    # Save master dataset
+    # master dataset
     analysis_cols = [
         "response_id", "vignette_id", "unit", "title",
         "setting", "condition", "block", "model",
@@ -335,7 +322,7 @@ def main():
     print(f"\n  Master dataset saved: {master_out}")
     print(f"  Rows: {len(master)}")
 
-    # Adjudication log
+    # adjudication log
     adj_log = df[df["needs_adjudication"] == True][[
         "response_id", "vignette_id", "title", "setting", "condition", "model",
         "A_total_computed", "B_total_computed", "C_total_computed",
@@ -346,7 +333,7 @@ def main():
     adj_log.to_csv(adj_out, index=False)
     print(f"  Adjudication log saved: {adj_out}  ({len(adj_log)} cases)")
 
-    # Reliability report
+    # reliability report
     report = reliability_report(df)
     rep_out = OUTPUT_DIR / f"crab_reliability_report_{stamp}.txt"
     with open(rep_out, "w") as f:
